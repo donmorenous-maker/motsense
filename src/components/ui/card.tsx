@@ -8,7 +8,7 @@ export function Card({
 }: {
   className?: string;
   children: React.ReactNode;
-  as?: keyof JSX.IntrinsicElements;
+  as?: keyof React.JSX.IntrinsicElements;
   dark?: boolean;
 }) {
   return (

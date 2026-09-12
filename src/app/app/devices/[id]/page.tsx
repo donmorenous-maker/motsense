@@ -15,16 +15,18 @@ export function generateStaticParams() {
 
 const tabs = ["Overview", "Traffic", "Health", "Connectivity", "Configuration", "Logs"];
 
-export default function DevicePage({
+export default async function DevicePage({
   params,
   searchParams,
 }: {
-  params: { id: string };
-  searchParams: { tab?: string };
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ tab?: string }>;
 }) {
-  const d = devices.find((x) => x.id === params.id);
+  const { id } = await params;
+  const { tab } = await searchParams;
+  const d = devices.find((x) => x.id === id);
   if (!d) notFound();
-  const active = searchParams.tab ?? "Overview";
+  const active = tab ?? "Overview";
   const recentEvents = events.filter((e) => e.deviceId === d.id).slice(0, 10);
 
   return (
