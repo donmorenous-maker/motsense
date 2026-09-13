@@ -1,0 +1,12 @@
+node_modules
+.next
+out
+build
+dist
+.env*
+!.env.example
+.DS_Store
+*.log
+.vercel
+.turbo
+next-env.d.ts.bak
