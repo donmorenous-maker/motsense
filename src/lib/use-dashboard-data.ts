@@ -98,7 +98,9 @@ export function useDashboardData() {
 
   useEffect(() => {
     mountedRef.current = true;
-    void refresh();
+    const initialTimer = window.setTimeout(() => {
+      void refresh();
+    }, 0);
 
     const timer = window.setInterval(() => {
       void refresh();
@@ -106,6 +108,7 @@ export function useDashboardData() {
 
     return () => {
       mountedRef.current = false;
+      window.clearTimeout(initialTimer);
       window.clearInterval(timer);
     };
   }, [refresh]);

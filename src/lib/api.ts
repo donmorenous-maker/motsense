@@ -1,6 +1,6 @@
 export interface VehicleEvent {
-  id?: string;
-  event_uid?: string;
+  id?: string | null;
+  event_uid?: string | null;
   device_eui: string;
   device_name?: string | null;
   gateway_id?: string | null;
