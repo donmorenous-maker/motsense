@@ -7,7 +7,6 @@ import { devices, gateways, events } from "@/data/mock";
 import { Icon } from "@/components/icons";
 import { ButtonLink } from "@/components/ui/button";
 import { StatusDot } from "@/components/ui/badge";
-import { timeAgo } from "@/lib/utils";
 
 export default function LiveMapPage() {
   const [selectedId, setSelectedId] = useState<string | null>("RR-014");
@@ -58,7 +57,7 @@ export default function LiveMapPage() {
                     <div className="mt-1 text-[12px] text-ink-500 flex items-center gap-1.5">
                       <StatusDot tone={selected.status === "online" ? "success" : selected.status === "warning" ? "warning" : "danger"} />
                       {selected.status === "online" ? "Online" : selected.status === "warning" ? "Warning" : "Offline"} ·{" "}
-                      Last packet {timeAgo(new Date(Date.now() - selected.lastSeenSec * 1000).toISOString())}
+                      Last packet {formatSecondsAgo(selected.lastSeenSec)}
                     </div>
                   </div>
                   <button className="text-ink-400 hover:text-ink-900" onClick={() => setSelectedId(null)} aria-label="Close">
@@ -120,6 +119,15 @@ export default function LiveMapPage() {
       </div>
     </>
   );
+}
+
+function formatSecondsAgo(seconds: number) {
+  if (seconds < 60) return `${seconds} sec ago`;
+  const minutes = Math.round(seconds / 60);
+  if (minutes < 60) return `${minutes} min ago`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) return `${hours} h ago`;
+  return `${Math.round(hours / 24)} d ago`;
 }
 
 function Filter({ label }: { label: string }) {
