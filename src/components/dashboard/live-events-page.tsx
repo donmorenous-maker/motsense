@@ -23,7 +23,7 @@ export function LiveEventsPage() {
           <CardBody className="space-y-2">
             <div className="text-[11px] font-mono uppercase tracking-widest text-mustard-600">Engineering feed</div>
             <div className="text-[15px] text-ink-700">
-              Live traffic events from the Motsense network. Select any row to inspect debug metadata without leaving the page.
+              Live traffic events from the Motsense network. Select any row to inspect metadata and reconstructed vibration signals without leaving the page.
             </div>
           </CardBody>
         </Card>
