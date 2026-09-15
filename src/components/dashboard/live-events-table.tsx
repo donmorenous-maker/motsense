@@ -211,9 +211,6 @@ function EventDetailsDrawer({
   onClose: () => void;
 }) {
   const [waveform, setWaveform] = useState<SignalWaveform | null>(null);
-  const [waveformStatus, setWaveformStatus] = useState<"idle" | "loading" | "ready" | "error">(
-    event.waveform_complete ? "loading" : "idle"
-  );
   const [waveformError, setWaveformError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -229,17 +226,10 @@ function EventDetailsDrawer({
 
   useEffect(() => {
     if (!event.waveform_complete) {
-      setWaveform(null);
-      setWaveformStatus("idle");
-      setWaveformError(null);
       return;
     }
 
     const controller = new AbortController();
-
-    setWaveform(null);
-    setWaveformStatus("loading");
-    setWaveformError(null);
 
     void getWaveform(
       {
@@ -254,7 +244,7 @@ function EventDetailsDrawer({
         }
 
         setWaveform(response);
-        setWaveformStatus("ready");
+        setWaveformError(null);
       })
       .catch((error) => {
         if (controller.signal.aborted) {
@@ -262,13 +252,14 @@ function EventDetailsDrawer({
         }
 
         setWaveform(null);
-        setWaveformStatus("error");
         setWaveformError(error instanceof Error ? error.message : "Unable to load waveform data.");
       });
 
     return () => controller.abort();
   }, [event.device_eui, event.event_id, event.event_uid, event.id, event.waveform_complete]);
 
+  const waveformStatus =
+    event.waveform_complete !== true ? "idle" : waveform ? "ready" : waveformError ? "error" : "loading";
   const duration = resolveEventDurationMs(event, waveform);
   const bandSegments = [
     { label: "0–20 Hz", value: event.band_energy_0_20_pct ?? 0, color: "#F6ECC8" },
@@ -613,7 +604,7 @@ export function LiveEventsTable({
           </CardBody>
         )}
       </Card>
-      {openEvent && <EventDetailsDrawer event={openEvent} onClose={() => setOpenEventKey(null)} />}
+      {openEvent && <EventDetailsDrawer key={openEventKey} event={openEvent} onClose={() => setOpenEventKey(null)} />}
     </>
   );
 }

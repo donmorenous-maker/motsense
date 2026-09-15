@@ -4,6 +4,10 @@ import { useMemo, useState } from "react";
 import { Icon } from "@/components/icons";
 import type { SignalWaveform } from "@/lib/api";
 
+const CHART_WIDTH = 1200;
+const CHART_HEIGHT = 330;
+const CHART_PAD = { l: 56, r: 18, t: 18, b: 34 };
+
 interface PlotPoint {
   index: number;
   value: number;
@@ -17,6 +21,11 @@ interface DecodedWaveform {
   rms: number;
   error: string | null;
 }
+
+type WaveformDecodeInput = Pick<
+  SignalWaveform,
+  "encoding" | "offset_value" | "samples" | "samples_base64" | "scale"
+>;
 
 function decodeBase64(base64: string): Uint8Array {
   const normalized = base64.replace(/\s+/g, "");
@@ -33,30 +42,31 @@ function decodeBase64(base64: string): Uint8Array {
   throw new Error("Base64 decoding is unavailable in this environment.");
 }
 
-function applyScale(value: number, waveform: SignalWaveform): number {
-  const scale = waveform.scale ?? 1;
-  const offset = waveform.offset_value ?? 0;
-  return value * scale + offset;
+function applyScale(value: number, scale: number | null | undefined, offset: number | null | undefined): number {
+  const normalizedScale = scale ?? 1;
+  const normalizedOffset = offset ?? 0;
+  return value * normalizedScale + normalizedOffset;
 }
 
-function decodeSamples(waveform: SignalWaveform): DecodedWaveform {
-  if (Array.isArray(waveform.samples) && waveform.samples.length > 0) {
-    let min = waveform.samples[0];
-    let max = waveform.samples[0];
-    let peakAbs = Math.abs(waveform.samples[0]);
+function decodeSamples(input: WaveformDecodeInput): DecodedWaveform {
+  const { encoding, offset_value, samples, samples_base64, scale } = input;
+  if (Array.isArray(samples) && samples.length > 0) {
+    let min = samples[0];
+    let max = samples[0];
+    let peakAbs = Math.abs(samples[0]);
     let energy = 0;
 
-    for (const sample of waveform.samples) {
+    for (const sample of samples) {
       if (sample < min) min = sample;
       if (sample > max) max = sample;
       if (Math.abs(sample) > peakAbs) peakAbs = Math.abs(sample);
       energy += sample * sample;
     }
 
-    const rms = Math.sqrt(energy / waveform.samples.length);
+    const rms = Math.sqrt(energy / samples.length);
 
     return {
-      samples: waveform.samples,
+      samples,
       min,
       max,
       peakAbs,
@@ -65,7 +75,7 @@ function decodeSamples(waveform: SignalWaveform): DecodedWaveform {
     };
   }
 
-  if (!waveform.samples_base64) {
+  if (!samples_base64) {
     return {
       samples: [],
       min: 0,
@@ -77,13 +87,13 @@ function decodeSamples(waveform: SignalWaveform): DecodedWaveform {
   }
 
   try {
-    const bytes = decodeBase64(waveform.samples_base64);
+    const bytes = decodeBase64(samples_base64);
     const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-    const normalizedEncoding = (waveform.encoding ?? "int16le").toLowerCase().replace(/[\s_-]+/g, "");
+    const normalizedEncoding = (encoding ?? "int16le").toLowerCase().replace(/[\s_-]+/g, "");
     const values: number[] = [];
 
     const push = (value: number) => {
-      values.push(applyScale(value, waveform));
+      values.push(applyScale(value, scale, offset_value));
     };
 
     if (
@@ -124,7 +134,7 @@ function decodeSamples(waveform: SignalWaveform): DecodedWaveform {
         max: 0,
         peakAbs: 0,
         rms: 0,
-        error: `Unsupported waveform encoding: ${waveform.encoding ?? "unknown"}`,
+        error: `Unsupported waveform encoding: ${encoding ?? "unknown"}`,
       };
     }
 
@@ -204,11 +214,17 @@ export function EventWaveformChart({
   className?: string;
 }) {
   const [hoverIndex, setHoverIndex] = useState<number | null>(null);
-  const width = 1200;
-  const height = 330;
-  const pad = { l: 56, r: 18, t: 18, b: 34 };
-
-  const decoded = useMemo(() => decodeSamples(waveform), [waveform]);
+  const decoded = useMemo(
+    () =>
+      decodeSamples({
+        encoding: waveform.encoding,
+        offset_value: waveform.offset_value,
+        samples: waveform.samples,
+        samples_base64: waveform.samples_base64,
+        scale: waveform.scale,
+      }),
+    [waveform.encoding, waveform.offset_value, waveform.samples, waveform.samples_base64, waveform.scale]
+  );
   const sampleRate = waveform.source_sample_rate_hz ?? waveform.tx_sample_rate_hz ?? null;
   const durationMs =
     sampleRate && sampleRate > 0 && decoded.samples.length > 0 ? (decoded.samples.length / sampleRate) * 1_000 : null;
@@ -261,8 +277,8 @@ export function EventWaveformChart({
 
   const yMin = decoded.min === decoded.max ? decoded.min - 1 : decoded.min;
   const yMax = decoded.min === decoded.max ? decoded.max + 1 : decoded.max;
-  const plotHeight = height - pad.t - pad.b;
-  const plotWidth = width - pad.l - pad.r;
+  const plotHeight = CHART_HEIGHT - CHART_PAD.t - CHART_PAD.b;
+  const plotWidth = CHART_WIDTH - CHART_PAD.l - CHART_PAD.r;
 
   const linePath = useMemo(() => {
     if (plotPoints.length === 0) {
@@ -273,9 +289,9 @@ export function EventWaveformChart({
       .map((point, index) => {
         const x =
           decoded.samples.length <= 1
-            ? pad.l
-            : pad.l + (point.index / (decoded.samples.length - 1)) * plotWidth;
-        const y = pad.t + (1 - (point.value - yMin) / (yMax - yMin)) * plotHeight;
+            ? CHART_PAD.l
+            : CHART_PAD.l + (point.index / (decoded.samples.length - 1)) * plotWidth;
+        const y = CHART_PAD.t + (1 - (point.value - yMin) / (yMax - yMin)) * plotHeight;
         return `${index === 0 ? "M" : "L"} ${x.toFixed(2)} ${y.toFixed(2)}`;
       })
       .join(" ");
@@ -335,7 +351,7 @@ export function EventWaveformChart({
         <>
           <div className="px-3 pb-2 pt-3">
             <svg
-              viewBox={`0 0 ${width} ${height}`}
+              viewBox={`0 0 ${CHART_WIDTH} ${CHART_HEIGHT}`}
               className="w-full"
               onMouseLeave={() => setHoverIndex(null)}
               onMouseMove={(event) => {
@@ -354,16 +370,22 @@ export function EventWaveformChart({
                 </linearGradient>
               </defs>
 
-              <rect x="0" y="0" width={width} height={height} rx="16" fill="#08080A" />
+              <rect x="0" y="0" width={CHART_WIDTH} height={CHART_HEIGHT} rx="16" fill="#08080A" />
 
               {Array.from({ length: 5 }, (_, index) => {
-                const y = pad.t + (index / 4) * plotHeight;
+                const y = CHART_PAD.t + (index / 4) * plotHeight;
                 const value = yMax - ((yMax - yMin) * index) / 4;
                 return (
                   <g key={`y-${index}`}>
-                    <line x1={pad.l} x2={width - pad.r} y1={y} y2={y} stroke="rgba(255,255,255,0.08)" />
+                    <line
+                      x1={CHART_PAD.l}
+                      x2={CHART_WIDTH - CHART_PAD.r}
+                      y1={y}
+                      y2={y}
+                      stroke="rgba(255,255,255,0.08)"
+                    />
                     <text
-                      x={pad.l - 8}
+                      x={CHART_PAD.l - 8}
                       y={y + 3}
                       textAnchor="end"
                       fontSize="10"
@@ -377,15 +399,15 @@ export function EventWaveformChart({
               })}
 
               {Array.from({ length: 7 }, (_, index) => {
-                const x = pad.l + (index / 6) * plotWidth;
+                const x = CHART_PAD.l + (index / 6) * plotWidth;
                 const valueMs = durationMs === null ? null : (index / 6) * durationMs;
                 return (
                   <g key={`x-${index}`}>
-                    <line x1={x} x2={x} y1={pad.t} y2={height - pad.b} stroke="rgba(255,255,255,0.05)" />
+                    <line x1={x} x2={x} y1={CHART_PAD.t} y2={CHART_HEIGHT - CHART_PAD.b} stroke="rgba(255,255,255,0.05)" />
                     {valueMs !== null && (
                       <text
                         x={x}
-                        y={height - 10}
+                        y={CHART_HEIGHT - 10}
                         textAnchor="middle"
                         fontSize="10"
                         fill="rgba(255,255,255,0.52)"
@@ -398,24 +420,30 @@ export function EventWaveformChart({
                 );
               })}
 
-              <line x1={pad.l} x2={width - pad.r} y1={pad.t + plotHeight / 2} y2={pad.t + plotHeight / 2} stroke="rgba(198,154,44,0.28)" />
+              <line
+                x1={CHART_PAD.l}
+                x2={CHART_WIDTH - CHART_PAD.r}
+                y1={CHART_PAD.t + plotHeight / 2}
+                y2={CHART_PAD.t + plotHeight / 2}
+                stroke="rgba(198,154,44,0.28)"
+              />
 
               <path d={linePath} fill="none" stroke="url(#waveform-line-grad)" strokeWidth="1.45" strokeLinejoin="round" strokeLinecap="round" />
 
               {hoverIndex !== null && decoded.samples.length > 0 && (
                 <>
                   <line
-                    x1={pad.l + (hoverIndex / Math.max(1, decoded.samples.length - 1)) * plotWidth}
-                    x2={pad.l + (hoverIndex / Math.max(1, decoded.samples.length - 1)) * plotWidth}
-                    y1={pad.t}
-                    y2={height - pad.b}
+                    x1={CHART_PAD.l + (hoverIndex / Math.max(1, decoded.samples.length - 1)) * plotWidth}
+                    x2={CHART_PAD.l + (hoverIndex / Math.max(1, decoded.samples.length - 1)) * plotWidth}
+                    y1={CHART_PAD.t}
+                    y2={CHART_HEIGHT - CHART_PAD.b}
                     stroke="rgba(255,255,255,0.34)"
                     strokeDasharray="4 4"
                   />
                   <circle
-                    cx={pad.l + (hoverIndex / Math.max(1, decoded.samples.length - 1)) * plotWidth}
+                    cx={CHART_PAD.l + (hoverIndex / Math.max(1, decoded.samples.length - 1)) * plotWidth}
                     cy={
-                      pad.t +
+                      CHART_PAD.t +
                       (1 - ((decoded.samples[hoverIndex] ?? 0) - yMin) / (yMax - yMin)) * plotHeight
                     }
                     r="4"
